@@ -13,6 +13,7 @@ from .modeling_qwen import Qwen25VL
 
 
 def resolve_layers(selector: str | list[int], n_layers: int) -> list[int]:
+    # 把配置里的 "all" / "last_10" / "1,2,3" 统一转成层号列表。
     if isinstance(selector, list):
         return [int(x) for x in selector]
     if selector == "all":
@@ -29,6 +30,8 @@ def _logit(p: float) -> float:
 
 
 def train_logistic_probe(features: np.ndarray, labels: np.ndarray, cfg: Config) -> dict[str, Any]:
+    # 论文 Algorithm 1 的核心：对每层 h(l) 训练一个线性安全分类器。
+    # 分类器形式是 sigmoid(w^T h + b)，w 的单位方向就是边界法向量 v。
     import torch
 
     x = torch.tensor(features, dtype=torch.float32)
@@ -49,6 +52,8 @@ def train_logistic_probe(features: np.ndarray, labels: np.ndarray, cfg: Config) 
         opt.step()
 
     with torch.no_grad():
+        # epsilon 是样本到目标阈值 P0 对应超平面的平均距离。
+        # 后续攻击会沿着 v 的方向移动大约 epsilon，模拟“跨过内部安全边界”。
         logits = x @ w + b
         probs = torch.sigmoid(logits)
         acc = ((probs >= 0.5).float() == y).float().mean().item()
@@ -68,6 +73,10 @@ def train_logistic_probe(features: np.ndarray, labels: np.ndarray, cfg: Config) 
 
 
 def collect_probe_matrix(model: Qwen25VL, samples: list[SafetySample], cfg: Config) -> tuple[dict[int, list[np.ndarray]], np.ndarray]:
+    # 对每条 unsafe 样本额外构造一条 safe 对照：
+    # unsafe = 原图 + 原始 MM-SafetyBench prompt
+    # safe   = 原图 + safe_prompt
+    # 这样每层都有 [unsafe, safe, unsafe, safe, ...] 的训练数据。
     layer_features: dict[int, list[np.ndarray]] = {}
     labels: list[int] = []
     for sample in samples:
@@ -82,6 +91,11 @@ def collect_probe_matrix(model: Qwen25VL, samples: list[SafetySample], cfg: Conf
 
 
 def probe_boundaries(cfg: Config, samples: list[SafetySample]) -> Path:
+    # 完整的 Safety Boundary Probing 阶段：
+    # 1. 加载 Qwen2.5-VL；
+    # 2. 提取各层 hidden states；
+    # 3. 每层训练 logistic probe；
+    # 4. 保存 w/b/v/epsilon，供攻击阶段读取。
     cfg.validate_paths()
     torch = __import__("torch")
     model = Qwen25VL(cfg.target_model_path, cfg.device, cfg.torch_dtype, cfg.attn_implementation)
@@ -103,4 +117,3 @@ def probe_boundaries(cfg: Config, samples: list[SafetySample]) -> Path:
         out,
     )
     return out
-

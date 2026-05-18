@@ -8,6 +8,7 @@ from typing import Iterable
 
 @dataclass(frozen=True)
 class SafetySample:
+    # 这个结构是全工程的数据最小单元：一条 MM-SafetyBench 样本 = 图片 + 原始有害 prompt。
     sample_id: str
     category: str
     image_path: Path
@@ -16,6 +17,8 @@ class SafetySample:
 
 
 def _candidate_image_dirs(category_dir: Path, image_format: str) -> list[Path]:
+    # 不同 MM-SafetyBench 复现仓库的图片目录命名不完全一样。
+    # image_format=auto 时，按常见优先级自动找 images / images_figstep / images_qr 等目录。
     if image_format == "auto":
         preferred = ["images", "images_figstep", "images_qr", "images_wr", "images_rotate", "images_mirror", "images_base64"]
         dirs = [category_dir / name for name in preferred if (category_dir / name).is_dir()]
@@ -32,6 +35,7 @@ def _candidate_image_paths(category_dir: Path, image_format: str, sample_id: str
 
 
 def _prompt_from_item(item: dict) -> str:
+    # 兼容多种 data.json 字段名。旧脚本里常见的是 original_prompt。
     for key in ("original_prompt", "prompt", "question", "text", "instruction"):
         value = item.get(key)
         if isinstance(value, str) and value.strip():
@@ -48,6 +52,9 @@ def _id_from_item(item: dict, index: int) -> str:
 
 
 def find_category_dirs(dataset_root: str | Path) -> list[Path]:
+    # 支持两种目录结构：
+    # 1. dataset_root/data.json
+    # 2. dataset_root/类别名/data.json
     root = Path(dataset_root)
     if (root / "data.json").exists():
         return [root]
@@ -59,6 +66,7 @@ def load_mm_safetybench(
     image_format: str = "images",
     limit: int | None = None,
 ) -> list[SafetySample]:
+    # 这里不改写数据，只把本地 data.json 规范化成 SafetySample 列表。
     samples: list[SafetySample] = []
     category_dirs = find_category_dirs(dataset_root)
     if not category_dirs:

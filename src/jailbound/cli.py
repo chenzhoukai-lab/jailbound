@@ -11,6 +11,8 @@ from .guard import evaluate_results
 
 
 def _samples(cfg: Config, limit: int | None):
+    # 数据集路径做了多候选兼容：
+    # 可以把 dataset_root 指到总目录，也可以直接指到 safebench/mm-safetybench 子目录。
     root = Path(cfg.dataset_root)
     candidates = [root]
     if cfg.dataset_name:
@@ -51,6 +53,8 @@ def cmd_eval(args) -> None:
 
 
 def cmd_run(args) -> None:
+    # 一键复现：probe -> attack -> eval。
+    # 初学时建议先用 --limit 2 或 --limit 5，确认路径和显存都没问题。
     cfg = Config.from_json(args.config)
     cfg.validate_paths(require_guard=True)
     samples = _samples(cfg, args.limit)

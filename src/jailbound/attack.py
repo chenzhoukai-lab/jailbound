@@ -19,6 +19,9 @@ def _tensor_probe(torch, probe: dict[str, Any], device):
 
 
 def _select_suffix(model: Qwen25VL, sample: SafetySample, base_prompt: str, suffixes: list[str], probes, cfg: Config) -> str:
+    # 论文里的文本扰动是 token-level 梯度替换，完整实现比较绕。
+    # 这里先做一个可读、可调试的版本：从候选 suffix 中选边界损失最低的。
+    # 后续如果要升级成 HotFlip/梯度替换，可以从这个函数扩展。
     if not suffixes:
         return cfg.attack.suffix
     best_suffix = suffixes[0]
@@ -39,6 +42,9 @@ def _select_suffix(model: Qwen25VL, sample: SafetySample, base_prompt: str, suff
 
 
 def optimize_sample(model: Qwen25VL, sample: SafetySample, probes: dict[int, dict[str, Any]], cfg: Config):
+    # Safety Boundary Crossing 的单样本优化。
+    # 输入：原图 + 原始 unsafe prompt
+    # 输出：pixel_delta + 被选中的文本 suffix
     torch = model.torch
     suffix = _select_suffix(model, sample, sample.prompt, cfg.attack.suffix_candidates, probes, cfg)
     prompt = sample.prompt + suffix
@@ -51,12 +57,15 @@ def optimize_sample(model: Qwen25VL, sample: SafetySample, probes: dict[int, dic
     opt = torch.optim.Adam([delta], lr=cfg.attack.visual_lr)
 
     with torch.no_grad():
+        # base_hidden 是攻击前的内部状态 h(l)，用来构造目标 h_target。
         base_outputs = model.model(**inputs, output_hidden_states=True, return_dict=True)
         base_hidden = model.pooled_hidden(base_outputs, cfg.boundary.pooling)
 
     t_probes = {layer: _tensor_probe(torch, probe, model.device) for layer, probe in probes.items()}
 
     for step in range(cfg.attack.iterations):
+        # 每一步都重新前向，得到当前扰动后的 hidden states 。
+        # 损失由三部分组成：L_align、L_geo、L_sem，对应论文 Eq. 6/7/8。
         opt.zero_grad()
         adv_inputs = dict(inputs)
         adv_inputs["pixel_values"] = base_pixels + delta
@@ -66,11 +75,14 @@ def optimize_sample(model: Qwen25VL, sample: SafetySample, probes: dict[int, dic
         align_loss = torch.zeros((), device=model.device)
         geo_loss = torch.zeros((), device=model.device)
         for layer, probe in t_probes.items():
+            # L_align：把当前 h_adv 拉向 h + direction * epsilon * v。
+            # config 里 boundary_direction 默认 -1，是为了贴近论文 h_target = h - epsilon * v。
             original_h = base_hidden[layer].float().detach()
             current_h = current_hidden[layer].float()
             target = original_h + cfg.attack.boundary_direction * probe["epsilon"] * probe["v"]
             delta_h = current_h - original_h
             align_loss = align_loss + torch.nn.functional.mse_loss(current_h, target)
+            # L_geo：要求移动方向和边界法向量一致，避免只靠 L2 乱飘。
             normed = delta_h / torch.linalg.vector_norm(delta_h).clamp_min(1e-6)
             geo_target = cfg.attack.boundary_direction * probe["v"]
             geo_loss = geo_loss + torch.nn.functional.mse_loss(normed, geo_target)
@@ -80,6 +92,7 @@ def optimize_sample(model: Qwen25VL, sample: SafetySample, probes: dict[int, dic
         total.backward()
         opt.step()
         with torch.no_grad():
+            # 投影步骤，对应论文里的 Pi_Gamma，保证扰动不超过预算。
             delta.clamp_(min=-cfg.attack.pixel_epsilon, max=cfg.attack.pixel_epsilon)
 
         if (step + 1) % 25 == 0:
@@ -107,6 +120,8 @@ def load_probes(boundary_path: str | Path) -> dict[int, dict[str, Any]]:
 
 
 def run_attack(cfg: Config, samples: list[SafetySample], boundary_path: str | Path | None = None) -> Path:
+    # 批量攻击入口：逐条样本优化扰动、生成回答，并写成 jsonl。
+    # jsonl 的好处是中途失败时前面已经完成的样本还能保留。
     cfg.validate_paths()
     boundary_path = Path(boundary_path or (cfg.output_path / "boundary_probes.pt"))
     probes = load_probes(boundary_path)
