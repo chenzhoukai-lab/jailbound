@@ -14,7 +14,7 @@
 - `target_model_path`：本地 `Qwen2.5-VL-7B-Instruct`。
 - `guard_model_path`：本地 `Qwen3Guard`。
 - `image_format`：默认 `auto`，会优先找 `images`，再找 `images_figstep/images_qr/images_wr/...`。
-- `attn_implementation`：默认 `eager`。如果遇到 `flash_attn_2_cuda ... undefined symbol`，不要用 `flash_attention_2`；如果遇到 `PyTorch SDPA requirements ... torch>=2.1.1`，不要用 `sdpa`。等环境版本匹配后再切回 `sdpa` 或 `flash_attention_2`。
+- `attn_implementation`：默认 `flash_attention_2`，适合已经正确安装 flash-attn 的 H100 环境。如果遇到 `flash_attn_2_cuda ... undefined symbol`，先切到 `sdpa`；如果遇到 `PyTorch SDPA requirements ... torch>=2.1.1`，再切到 `eager`。
 
 ## 运行
 

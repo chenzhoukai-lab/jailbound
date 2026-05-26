@@ -7,7 +7,7 @@
   "output_dir": "outputs/qwen25vl_jailbound",
   "device": "cuda",
   "torch_dtype": "bfloat16",
-  "attn_implementation": "eager",
+  "attn_implementation": "flash_attention_2",
   "boundary": {
     "layers": "last_10",
     "pooling": "last_token",
