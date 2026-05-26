@@ -22,12 +22,33 @@ $env:PYTHONPATH = "$PWD/src"
 python -m jailbound run --config configs/qwen25vl_local.json --limit 20
 ```
 
+## 两张 H100 并行运行
+
+推荐用 `accelerate launch` 启动两个进程：
+
+```powershell
+$env:PYTHONPATH = "$PWD/src"
+accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound run --config configs/qwen25vl_local.json
+```
+
+或者直接用脚本：
+
+```powershell
+.\scripts\run_jailbound_qwen_2h100.ps1 --limit 20
+```
+
+并行逻辑：
+
+- `probe`：每张卡提取自己分片的 hidden states，写入 `_probe_shards/rank_*.npz`，主进程合并后训练 boundary probes。
+- `attack`：每张卡只优化 `rank::world_size` 的样本，写入 `_attack_shards/rank_*.jsonl`，主进程合并成 `attack_results.jsonl`。
+- `eval`：每张卡评测自己的输出分片，写入 `_guard_shards/rank_*.jsonl`，主进程合并并生成 `summary.json`。
+
 分阶段运行：
 
 ```powershell
-python -m jailbound probe --config configs/qwen25vl_local.json --limit 100
-python -m jailbound attack --config configs/qwen25vl_local.json --limit 20
-python -m jailbound eval --config configs/qwen25vl_local.json
+accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound probe --config configs/qwen25vl_local.json --limit 100
+accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound attack --config configs/qwen25vl_local.json --limit 20
+accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound eval --config configs/qwen25vl_local.json
 ```
 
 输出在 `outputs/qwen25vl_jailbound/`：
@@ -36,4 +57,3 @@ python -m jailbound eval --config configs/qwen25vl_local.json
 - `attack_results.jsonl`
 - `guard_eval.jsonl`
 - `summary.json`
-

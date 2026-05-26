@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import json
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ import numpy as np
 
 from .config import Config
 from .dataset import SafetySample
+from .distributed import get_accelerator, reset_shard_dir, runtime_device, shard_items
 from .modeling_qwen import Qwen25VL
 
 
@@ -96,24 +98,68 @@ def probe_boundaries(cfg: Config, samples: list[SafetySample]) -> Path:
     # 2. 提取各层 hidden states；
     # 3. 每层训练 logistic probe；
     # 4. 保存 w/b/v/epsilon，供攻击阶段读取。
+    accelerator = get_accelerator()
     cfg.validate_paths()
     torch = __import__("torch")
-    model = Qwen25VL(cfg.target_model_path, cfg.device, cfg.torch_dtype, cfg.attn_implementation)
-    layer_features, labels = collect_probe_matrix(model, samples, cfg)
-    probes = {}
-    for layer, feats in sorted(layer_features.items()):
-        probes[layer] = train_logistic_probe(np.stack(feats), labels, cfg)
-        print(f"layer={layer} probe_acc={probes[layer]['accuracy']:.4f} epsilon={probes[layer]['epsilon']:.4f}")
-
     out = cfg.output_path / "boundary_probes.pt"
-    torch.save(
-        {
-            "config": asdict(cfg),
-            "layers": sorted(probes),
-            "probes": probes,
+    shard_dir = cfg.output_path / "_probe_shards"
+    reset_shard_dir(shard_dir, accelerator)
+
+    local_samples = shard_items(samples, accelerator)
+    if local_samples:
+        model = Qwen25VL(
+            cfg.target_model_path,
+            runtime_device(cfg, accelerator),
+            cfg.torch_dtype,
+            cfg.attn_implementation,
+        )
+        layer_features, labels = collect_probe_matrix(model, local_samples, cfg)
+    else:
+        layer_features, labels = {}, np.asarray([], dtype=np.float32)
+
+    shard_payload: dict[str, Any] = {"labels": labels, "layers": np.asarray(sorted(layer_features), dtype=np.int64)}
+    for layer, feats in sorted(layer_features.items()):
+        shard_payload[f"layer_{layer}"] = np.stack(feats)
+    np.savez_compressed(shard_dir / f"rank_{accelerator.process_index}.npz", **shard_payload)
+    accelerator.wait_for_everyone()
+
+    if accelerator.is_main_process:
+        merged_features: dict[int, list[np.ndarray]] = {}
+        merged_labels: list[np.ndarray] = []
+        for shard_path in sorted(shard_dir.glob("rank_*.npz")):
+            with np.load(shard_path) as shard:
+                if shard["labels"].size == 0:
+                    continue
+                merged_labels.append(shard["labels"])
+                for layer in shard["layers"].tolist():
+                    merged_features.setdefault(int(layer), []).append(shard[f"layer_{int(layer)}"])
+        if not merged_labels:
+            raise ValueError("No samples were available for boundary probing.")
+        labels = np.concatenate(merged_labels, axis=0)
+        probes = {}
+        for layer, shard_arrays in sorted(merged_features.items()):
+            feats = np.concatenate(shard_arrays, axis=0)
+            probes[layer] = train_logistic_probe(feats, labels, cfg)
+            print(f"layer={layer} probe_acc={probes[layer]['accuracy']:.4f} epsilon={probes[layer]['epsilon']:.4f}")
+
+        torch.save(
+            {
+                "config": asdict(cfg),
+                "layers": sorted(probes),
+                "probes": probes,
+                "num_samples": len(samples),
+                "num_processes": accelerator.num_processes,
+                "shards": [p.name for p in sorted(shard_dir.glob("rank_*.npz"))],
+                "label_note": "unsafe=MM-SafetyBench original prompt, safe=config.boundary.safe_prompt on same image",
+            },
+            out,
+        )
+        metadata = {
+            "boundary_path": str(out),
+            "num_processes": accelerator.num_processes,
             "num_samples": len(samples),
-            "label_note": "unsafe=MM-SafetyBench original prompt, safe=config.boundary.safe_prompt on same image",
-        },
-        out,
-    )
+            "layers": sorted(probes),
+        }
+        (cfg.output_path / "boundary_probes_meta.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    accelerator.wait_for_everyone()
     return out

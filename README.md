@@ -29,6 +29,19 @@ Run all stages:
 python -m jailbound run --config configs/qwen25vl_local.json --limit 20
 ```
 
+Run on two H100 GPUs with Accelerate:
+
+```powershell
+$env:PYTHONPATH = "$PWD/src"
+accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound run --config configs/qwen25vl_local.json
+```
+
+On Windows PowerShell you can also use:
+
+```powershell
+.\scripts\run_jailbound_qwen_2h100.ps1 --limit 20
+```
+
 Or run them separately:
 
 ```powershell
@@ -53,7 +66,8 @@ Default outputs are written under `outputs/qwen25vl_jailbound/`:
 - `guard_eval.jsonl`: Qwen3Guard judgments per sample
 - `summary.json`: ASR and attack-effectiveness summary
 
+When launched with `accelerate`, each process handles only its own shard of samples. Shards are written under `_probe_shards`, `_attack_shards`, and `_guard_shards`, then merged by rank 0.
+
 ## Notes
 
 Qwen2.5-VL model internals differ from the abstract notation in the paper. This implementation treats decoder hidden states after multimodal token fusion as the fusion-layer representations `h(l)`, which is the accessible equivalent for Hugging Face Qwen2.5-VL.
-
