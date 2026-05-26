@@ -33,7 +33,8 @@ def _select_suffix(model: Qwen25VL, sample: SafetySample, base_prompt: str, suff
             current = model.pooled_hidden(model.forward_hidden(sample.image_path, base_prompt + suffix), cfg.boundary.pooling)
             score = 0.0
             for layer, probe in probes.items():
-                direction = cfg.attack.boundary_direction * probe["epsilon"] * probe["v"]
+                v = model.torch.as_tensor(probe["v"], dtype=model.torch.float32, device=model.device)
+                direction = cfg.attack.boundary_direction * probe["epsilon"] * v
                 target = original[layer].float().to(model.device) + direction
                 score += model.torch.nn.functional.mse_loss(current[layer].float(), target).item()
             if score < best_score:
