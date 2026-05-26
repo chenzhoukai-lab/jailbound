@@ -83,7 +83,7 @@ class Qwen25VL:
         model_path: str,
         device: str = "cuda",
         torch_dtype: str = "bfloat16",
-        attn_implementation: str | None = "sdpa",
+        attn_implementation: str | None = "eager",
     ) -> None:
         self.torch = _require_torch()
         if attn_implementation != "flash_attention_2":
@@ -104,7 +104,15 @@ class Qwen25VL:
         }
         if attn_implementation:
             kwargs["attn_implementation"] = attn_implementation
-        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_path, **kwargs).eval()
+        try:
+            self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_path, **kwargs).eval()
+        except ImportError as exc:
+            message = str(exc)
+            if attn_implementation == "sdpa" and "SDPA requirements" in message:
+                kwargs["attn_implementation"] = "eager"
+                self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_path, **kwargs).eval()
+            else:
+                raise
         self.model.to(self.device)
 
     @property

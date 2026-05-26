@@ -11,7 +11,7 @@ The implementation follows the paper's two-stage pipeline:
 1. **Safety Boundary Probing**: collect layer-wise fused hidden states on safe/unsafe prompt pairs and train logistic boundary probes.
 2. **Safety Boundary Crossing**: optimize a multimodal adversarial input against the learned boundary objectives, then evaluate outputs with Qwen3Guard.
 
-By default the config uses `"attn_implementation": "sdpa"` because many shared clusters have a `flash_attn` wheel compiled against a different PyTorch version. If your flash-attn install is known-good, you can switch it back to `"flash_attention_2"`.
+By default the config uses `"attn_implementation": "eager"` because some shared clusters have either a `flash_attn` wheel compiled against a different PyTorch version or a PyTorch version below the SDPA requirement. If your environment is newer, you can switch to `"sdpa"` or `"flash_attention_2"`.
 
 ## Quick Start
 
