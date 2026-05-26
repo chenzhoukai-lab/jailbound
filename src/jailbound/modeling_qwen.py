@@ -28,6 +28,13 @@ def _dtype_from_name(torch: Any, name: str):
 
 
 def _disable_broken_flash_attn() -> None:
+    """Make Transformers ignore an installed but ABI-broken flash-attn package.
+
+    Some clusters have a stale flash_attn wheel on PYTHONPATH. Recent
+    Transformers imports flash-attn helper modules while importing Qwen2.5-VL,
+    before `from_pretrained(attn_implementation="sdpa")` can take effect. We
+    therefore patch the availability checks before importing the Qwen class.
+    """
     try:
         import transformers.utils.import_utils as import_utils
     except Exception:
@@ -39,6 +46,27 @@ def _disable_broken_flash_attn() -> None:
     ):
         if hasattr(import_utils, name):
             setattr(import_utils, name, False)
+    for name in (
+        "is_flash_attn_available",
+        "is_flash_attn_2_available",
+        "is_flash_attn_3_available",
+        "is_flash_attn_greater_or_equal_2_10",
+    ):
+        if hasattr(import_utils, name):
+            setattr(import_utils, name, lambda *args, **kwargs: False)
+
+    try:
+        import transformers.utils as utils
+    except Exception:
+        return
+    for name in (
+        "is_flash_attn_available",
+        "is_flash_attn_2_available",
+        "is_flash_attn_3_available",
+        "is_flash_attn_greater_or_equal_2_10",
+    ):
+        if hasattr(utils, name):
+            setattr(utils, name, lambda *args, **kwargs: False)
 
 
 class Qwen25VL:
