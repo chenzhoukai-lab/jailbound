@@ -1,9 +1,9 @@
 {
-  "dataset_root": "C:/path/to/mm-safetybench",
+  "dataset_root": "/inspire/hdd/global_user/wenming-253108090054/datasets/mm-safetybench",
   "dataset_name": "mm-safetybench",
   "image_format": "auto",
-  "target_model_path": "C:/path/to/Qwen2.5-VL-7B-Instruct",
-  "guard_model_path": "C:/path/to/Qwen3Guard-Gen-8B",
+  "target_model_path": "/inspire/hdd/global_user/wenming-253108090054/models/Qwen2.5-VL-7B-Instruct",
+  "guard_model_path": "/inspire/hdd/global_user/wenming-253108090054/models/Qwen3Guard-Gen-8B",
   "output_dir": "outputs/qwen25vl_jailbound",
   "device": "cuda",
   "torch_dtype": "bfloat16",
