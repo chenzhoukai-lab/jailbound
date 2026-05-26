@@ -27,6 +27,20 @@ def _dtype_from_name(torch: Any, name: str):
     }.get(name.lower(), torch.bfloat16)
 
 
+def _disable_broken_flash_attn() -> None:
+    try:
+        import transformers.utils.import_utils as import_utils
+    except Exception:
+        return
+    for name in (
+        "_flash_attn_2_available",
+        "_flash_attn_available",
+        "_flash_attn_3_available",
+    ):
+        if hasattr(import_utils, name):
+            setattr(import_utils, name, False)
+
+
 class Qwen25VL:
     """Qwen2.5-VL 的薄封装。
 
@@ -41,9 +55,11 @@ class Qwen25VL:
         model_path: str,
         device: str = "cuda",
         torch_dtype: str = "bfloat16",
-        attn_implementation: str | None = "flash_attention_2",
+        attn_implementation: str | None = "sdpa",
     ) -> None:
         self.torch = _require_torch()
+        if attn_implementation != "flash_attention_2":
+            _disable_broken_flash_attn()
         from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
         self.device = self.torch.device(device if device == "cpu" or self.torch.cuda.is_available() else "cpu")
