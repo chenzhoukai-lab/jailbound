@@ -121,24 +121,81 @@ def load_probes(boundary_path: str | Path) -> dict[int, dict[str, Any]]:
     return probes
 
 
-def run_attack(cfg: Config, samples: list[SafetySample], boundary_path: str | Path | None = None) -> Path:
+def _read_jsonl_rows(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            # A killed process can leave a partial final line. Ignore it and
+            # recompute that sample on resume.
+            continue
+    return rows
+
+
+def _load_completed_attack_rows(out_path: Path, shard_dir: Path) -> dict[int, dict[str, Any]]:
+    completed: dict[int, dict[str, Any]] = {}
+    for row in _read_jsonl_rows(out_path):
+        if "_order" in row:
+            completed[int(row["_order"])] = row
+    if shard_dir.exists():
+        for shard_path in sorted(shard_dir.glob("rank_*.jsonl")):
+            for row in _read_jsonl_rows(shard_path):
+                if "_order" in row:
+                    completed[int(row["_order"])] = row
+    return completed
+
+
+def _merge_attack_shards(out_path: Path, shard_dir: Path) -> list[dict[str, Any]]:
+    completed = _load_completed_attack_rows(out_path, shard_dir)
+    rows = [completed[key] for key in sorted(completed)]
+    with open(out_path, "w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return rows
+
+
+def run_attack(cfg: Config, samples: list[SafetySample], boundary_path: str | Path | None = None, resume: bool = False) -> Path:
     # 批量攻击入口：逐条样本优化扰动、生成回答，并写成 jsonl。
     # jsonl 的好处是中途失败时前面已经完成的样本还能保留。
     accelerator = get_accelerator()
     cfg.validate_paths()
     boundary_path = Path(boundary_path or (cfg.output_path / "boundary_probes.pt"))
     probes = load_probes(boundary_path)
-    model = Qwen25VL(cfg.target_model_path, runtime_device(cfg, accelerator), cfg.torch_dtype, cfg.attn_implementation)
     out_path = cfg.output_path / "attack_results.jsonl"
     shard_dir = cfg.output_path / "_attack_shards"
-    reset_shard_dir(shard_dir, accelerator)
+    if resume:
+        shard_dir.mkdir(parents=True, exist_ok=True)
+        accelerator.wait_for_everyone()
+    else:
+        reset_shard_dir(shard_dir, accelerator)
 
     max_samples = cfg.attack.max_samples if cfg.attack.max_samples is not None else len(samples)
     selected = samples[:max_samples]
     indexed = list(enumerate(selected))
-    local_indexed = shard_items(indexed, accelerator)
+    completed_rows = _load_completed_attack_rows(out_path, shard_dir) if resume else {}
+    completed_orders = set(completed_rows)
+    pending_indexed = [(idx, sample) for idx, sample in indexed if idx not in completed_orders]
+    local_indexed = shard_items(pending_indexed, accelerator)
     local_path = shard_dir / f"rank_{accelerator.process_index}.jsonl"
-    with open(local_path, "w", encoding="utf-8") as f:
+
+    if accelerator.is_main_process and resume:
+        print(
+            f"[attack][resume] completed={len(completed_orders)} "
+            f"pending={len(pending_indexed)} total={len(indexed)}",
+            flush=True,
+        )
+
+    model = None
+    if local_indexed:
+        model = Qwen25VL(cfg.target_model_path, runtime_device(cfg, accelerator), cfg.torch_dtype, cfg.attn_implementation)
+
+    mode = "a" if resume else "w"
+    with open(local_path, mode, encoding="utf-8") as f:
         for local_pos, (global_index, sample) in enumerate(local_indexed, start=1):
             print(
                 f"[attack][rank {accelerator.process_index}] "
@@ -146,6 +203,7 @@ def run_attack(cfg: Config, samples: list[SafetySample], boundary_path: str | Pa
                 f"category={sample.category} id={sample.sample_id}",
                 flush=True,
             )
+            assert model is not None
             delta, suffix = optimize_sample(model, sample, probes, cfg)
             prompt = sample.prompt + suffix
             response = model.generate(sample.image_path, prompt, pixel_delta=delta, **cfg.attack.generate)
@@ -169,13 +227,7 @@ def run_attack(cfg: Config, samples: list[SafetySample], boundary_path: str | Pa
     accelerator.wait_for_everyone()
 
     if accelerator.is_main_process:
-        rows = []
-        for shard_path in sorted(shard_dir.glob("rank_*.jsonl")):
-            rows.extend(json.loads(line) for line in shard_path.read_text(encoding="utf-8").splitlines() if line.strip())
-        rows.sort(key=lambda x: x["_order"])
-        with open(out_path, "w", encoding="utf-8") as f:
-            for row in rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        rows = _merge_attack_shards(out_path, shard_dir)
         print(f"merged {len(rows)} attack rows from {accelerator.num_processes} process(es): {out_path}")
     accelerator.wait_for_everyone()
     return out_path

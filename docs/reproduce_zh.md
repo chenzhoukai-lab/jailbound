@@ -44,6 +44,16 @@ accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound run --co
 - `attack`：每张卡只优化 `rank::world_size` 的样本，写入 `_attack_shards/rank_*.jsonl`，主进程合并成 `attack_results.jsonl`。
 - `eval`：每张卡评测自己的输出分片，写入 `_guard_shards/rank_*.jsonl`，主进程合并并生成 `summary.json`。
 
+## 中断后续跑 / 从 2 卡切到 4 卡
+
+攻击阶段每完成一条样本都会写入 `outputs/qwen25vl_jailbound/_attack_shards/rank_*.jsonl`。如果任务中断，不要删除 `outputs/qwen25vl_jailbound/`，重新启动时加 `--resume`：
+
+```powershell
+accelerate launch --num_processes 4 --mixed_precision bf16 -m jailbound run --config configs/qwen25vl_local.json --resume
+```
+
+`--resume` 会复用已有的 `boundary_probes.pt`，读取已有 attack shard，跳过已经完成的 `_order`，把剩余样本重新分配到当前 GPU 数量上。也就是说，可以先 2 卡跑一部分，再切到 4 卡继续跑。
+
 分阶段运行：
 
 ```powershell

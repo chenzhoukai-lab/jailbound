@@ -42,7 +42,7 @@ def cmd_attack(args) -> None:
     cfg.validate_paths()
     samples = _samples(cfg, args.limit)
     print(f"Loaded {len(samples)} samples for attack.")
-    out = run_attack(cfg, samples, args.boundary)
+    out = run_attack(cfg, samples, args.boundary, resume=args.resume)
     print(f"Saved attack results: {out}")
 
 
@@ -59,8 +59,8 @@ def cmd_run(args) -> None:
     cfg.validate_paths(require_guard=True)
     samples = _samples(cfg, args.limit)
     print(f"Loaded {len(samples)} samples for full JailBound reproduction.")
-    boundary = probe_boundaries(cfg, samples)
-    attack_results = run_attack(cfg, samples, boundary)
+    boundary = cfg.output_path / "boundary_probes.pt" if args.resume and (cfg.output_path / "boundary_probes.pt").exists() else probe_boundaries(cfg, samples)
+    attack_results = run_attack(cfg, samples, boundary, resume=args.resume)
     evaluate_results(cfg, attack_results)
 
 
@@ -77,6 +77,7 @@ def main(argv: list[str] | None = None) -> None:
 
     p_attack = sub.add_parser("attack", parents=[common], help="Run Safety Boundary Crossing attack.")
     p_attack.add_argument("--boundary", default=None, help="Boundary probe checkpoint path.")
+    p_attack.add_argument("--resume", action="store_true", help="Keep existing attack shards and skip completed samples.")
     p_attack.set_defaults(func=cmd_attack)
 
     p_eval = sub.add_parser("eval", help="Evaluate attack outputs with local Qwen3Guard.")
@@ -85,6 +86,7 @@ def main(argv: list[str] | None = None) -> None:
     p_eval.set_defaults(func=cmd_eval)
 
     p_run = sub.add_parser("run", parents=[common], help="Run probe, attack, and guard evaluation.")
+    p_run.add_argument("--resume", action="store_true", help="Reuse boundary probes and attack shards when present.")
     p_run.set_defaults(func=cmd_run)
 
     args = parser.parse_args(argv)

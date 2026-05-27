@@ -70,6 +70,12 @@ Default outputs are written under `outputs/qwen25vl_jailbound/`:
 
 When launched with `accelerate`, each process handles only its own shard of samples. Shards are written under `_probe_shards`, `_attack_shards`, and `_guard_shards`, then merged by rank 0.
 
+To resume an interrupted attack, keep `outputs/qwen25vl_jailbound/_attack_shards/` and relaunch with `--resume`. This also works when changing from 2 GPUs to 4 GPUs; completed sample orders are skipped and only pending samples are redistributed:
+
+```powershell
+accelerate launch --num_processes 4 --mixed_precision bf16 -m jailbound run --config configs/qwen25vl_local.json --resume
+```
+
 ## Notes
 
 Qwen2.5-VL model internals differ from the abstract notation in the paper. This implementation treats decoder hidden states after multimodal token fusion as the fusion-layer representations `h(l)`, which is the accessible equivalent for Hugging Face Qwen2.5-VL.
