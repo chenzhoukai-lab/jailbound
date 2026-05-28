@@ -1,0 +1,17 @@
+{
+  "boundary_path": "outputs/qwen25vl_jailbound/boundary_probes.pt",
+  "num_processes": 2,
+  "num_samples": 1680,
+  "layers": [
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28
+  ]
+}
