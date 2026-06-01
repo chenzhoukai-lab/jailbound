@@ -59,6 +59,7 @@ class Config:
     image_format: str = "images"
     target_model_path: str = ""
     guard_model_path: str = ""
+    follow_judge_model_path: str = ""
     output_dir: str = "outputs/qwen25vl_jailbound"
     device: str = "cuda"
     torch_dtype: str = "bfloat16"
@@ -78,10 +79,11 @@ class Config:
         cfg.dataset_root = _expand(cfg.dataset_root)
         cfg.target_model_path = _expand(cfg.target_model_path)
         cfg.guard_model_path = _expand(cfg.guard_model_path)
+        cfg.follow_judge_model_path = _expand(cfg.follow_judge_model_path) if cfg.follow_judge_model_path else ""
         cfg.output_dir = _expand(cfg.output_dir)
         return cfg
 
-    def validate_paths(self, require_guard: bool = False) -> None:
+    def validate_paths(self, require_guard: bool = False, require_follow_judge: bool = False) -> None:
         # 在真正加载大模型前先检查路径。这样路径没填时不会等到 torch/transformers 报很长的错。
         missing = []
         for label, value in [
@@ -96,6 +98,12 @@ class Config:
             or not Path(self.guard_model_path).exists()
         ):
             missing.append(f"guard_model_path={self.guard_model_path!r}")
+        if require_follow_judge and (
+            not self.follow_judge_model_path
+            or "C:/path/to" in self.follow_judge_model_path
+            or not Path(self.follow_judge_model_path).exists()
+        ):
+            missing.append(f"follow_judge_model_path={self.follow_judge_model_path!r}")
         if missing:
             joined = "\n  - ".join(missing)
             raise FileNotFoundError(f"Please set valid local paths in config:\n  - {joined}")

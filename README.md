@@ -5,6 +5,7 @@ This workspace contains a practical reproduction scaffold for **JailBound: Jailb
 - local MM-SafetyBench data
 - local `Qwen2.5-VL-7B-Instruct`
 - local `Qwen3Guard` as the ASR / attack-effectiveness judge
+- local `Qwen2.5-7B-Instruct` as the optional semantic instruction-following judge
 
 The implementation follows the paper's two-stage pipeline:
 
@@ -21,7 +22,8 @@ Edit paths in `configs/qwen25vl_local.json`:
 {
   "dataset_root": "D:/path/to/mm-safetybench",
   "target_model_path": "D:/models/Qwen2.5-VL-7B-Instruct",
-  "guard_model_path": "D:/models/Qwen3Guard-Gen-8B"
+  "guard_model_path": "D:/models/Qwen3Guard-Gen-8B",
+  "follow_judge_model_path": "D:/models/Qwen2.5-7B-Instruct"
 }
 ```
 
@@ -67,7 +69,7 @@ python -m jailbound follow-eval --config configs/qwen25vl_local.json --mode heur
 accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound follow-eval --config configs/qwen25vl_local.json --mode judge
 ```
 
-`follow_heuristic_asr` is rule-based and does not load a model. `follow_judge_asr` asks the local Qwen3Guard model to output 0/1 for whether the response semantically follows the original harmful instruction, regardless of safety.
+`follow_heuristic_asr` is rule-based and does not load a model. `follow_judge_asr` asks `follow_judge_model_path` (recommended: local Qwen2.5-7B-Instruct) to output 0/1 for whether the response semantically follows the original harmful instruction, regardless of safety.
 
 If you use a `src` layout without installing the package, run from this repo root with:
 

@@ -4,6 +4,7 @@
   "image_format": "auto",
   "target_model_path": "/inspire/hdd/global_user/wenming-253108090054/models/Qwen2.5-VL-7B-Instruct",
   "guard_model_path": "/inspire/hdd/global_user/wenming-253108090054/models/Qwen3Guard-Gen-8B",
+  "follow_judge_model_path": "/inspire/hdd/global_user/wenming-253108090054/models/Qwen2.5-7B-Instruct",
   "output_dir": "outputs/qwen25vl_jailbound",
   "device": "cuda",
   "torch_dtype": "bfloat16",

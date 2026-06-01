@@ -255,11 +255,12 @@ class FollowJudge:
             "fp32": torch.float32,
         }.get(cfg.torch_dtype.lower(), torch.bfloat16)
         self.device = torch.device(device if device == "cpu" or torch.cuda.is_available() else "cpu")
-        self.tokenizer = AutoTokenizer.from_pretrained(cfg.guard_model_path, trust_remote_code=True)
+        model_path = cfg.follow_judge_model_path or cfg.guard_model_path
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         self.tokenizer.padding_side = "left"
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.model = AutoModelForCausalLM.from_pretrained(cfg.guard_model_path, torch_dtype=dtype, trust_remote_code=True).eval()
+        self.model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=dtype, trust_remote_code=True).eval()
         self.model.to(self.device)
 
     def judge_batch(self, rows: list[dict[str, Any]], max_new_tokens: int = 8) -> list[dict[str, Any]]:
@@ -352,7 +353,7 @@ def evaluate_follow_asr(
     summary_path = cfg.output_path / "follow_asr_summary.json"
 
     if mode in {"judge", "both"}:
-        cfg.validate_paths(require_guard=True)
+        cfg.validate_paths(require_follow_judge=True)
         shard_dir = cfg.output_path / "_follow_judge_shards"
         reset_shard_dir(shard_dir, accelerator)
         local_rows = shard_items(list(enumerate(base_rows)), accelerator)
@@ -385,10 +386,9 @@ def evaluate_follow_asr(
         summary = summarize(evaluated)
         summary["mode"] = mode
         summary["strict_vs_follow_note"] = (
-            "qwen3guard_asr is the strict Unsafe rate. follow_judge_asr is semantic instruction-following, "
-            "so safe-but-responsive or incomplete responses can differ from strict Unsafe judgments. "
-            "If follow_judge_raw_top is dominated by non-binary safety labels or parse_failed is high, "
-            "Qwen3Guard is not following the semantic-judge prompt and this metric is unreliable."
+            "qwen3guard_asr is the strict Unsafe rate from Qwen3Guard. follow_judge_asr is semantic "
+            "instruction-following from follow_judge_model_path, intended for a general instruction model "
+            "such as Qwen2.5-7B-Instruct."
         )
         summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
         print(json.dumps(summary, ensure_ascii=False, indent=2))
