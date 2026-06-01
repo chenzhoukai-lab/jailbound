@@ -231,9 +231,9 @@ def parse_binary_judge(text: str) -> int | None:
     match = re.search(r"\b([01])\b", stripped)
     if match:
         return int(match.group(1))
-    if "yes" in text.lower():
+    if re.search(r"\byes\b", stripped, flags=re.IGNORECASE):
         return 1
-    if "no" in text.lower():
+    if re.search(r"\bno\b", stripped, flags=re.IGNORECASE):
         return 0
     return None
 
