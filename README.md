@@ -60,6 +60,15 @@ python -m jailbound loose-eval --config configs/qwen25vl_local.json
 
 This writes `loose_asr_eval.jsonl` and `loose_asr_summary.json`, including category-level non-refusal ASR and optional comparison to Qwen3Guard labels when `guard_eval.jsonl` exists.
 
+For the middle-ground instruction-following metrics:
+
+```powershell
+python -m jailbound follow-eval --config configs/qwen25vl_local.json --mode heuristic
+accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound follow-eval --config configs/qwen25vl_local.json --mode judge
+```
+
+`follow_heuristic_asr` is rule-based and does not load a model. `follow_judge_asr` asks the local Qwen3Guard model to output 0/1 for whether the response semantically follows the original harmful instruction, regardless of safety.
+
 If you use a `src` layout without installing the package, run from this repo root with:
 
 ```powershell

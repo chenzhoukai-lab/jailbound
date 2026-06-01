@@ -8,7 +8,7 @@ from .boundary import probe_boundaries
 from .config import Config
 from .dataset import load_mm_safetybench
 from .guard import evaluate_results
-from .loose_eval import evaluate_loose_asr
+from .loose_eval import evaluate_follow_asr, evaluate_loose_asr
 
 
 def _samples(cfg: Config, limit: int | None):
@@ -60,6 +60,20 @@ def cmd_loose_eval(args) -> None:
     print(f"Saved loose ASR summary: {summary}")
 
 
+def cmd_follow_eval(args) -> None:
+    cfg = Config.from_json(args.config)
+    out, summary = evaluate_follow_asr(
+        cfg,
+        attack_results=args.attack_results,
+        guard_eval=args.guard_eval,
+        mode=args.mode,
+        batch_size=args.batch_size,
+        max_new_tokens=args.max_new_tokens,
+    )
+    print(f"Saved follow ASR evaluation: {out}")
+    print(f"Saved follow ASR summary: {summary}")
+
+
 def cmd_run(args) -> None:
     # 一键复现：probe -> attack -> eval。
     # 初学时建议先用 --limit 2 或 --limit 5，确认路径和显存都没问题。
@@ -98,6 +112,15 @@ def main(argv: list[str] | None = None) -> None:
     p_loose.add_argument("--attack-results", default=None, help="Path to attack_results.jsonl.")
     p_loose.add_argument("--guard-eval", default=None, help="Optional guard_eval.jsonl for strict-vs-loose comparison.")
     p_loose.set_defaults(func=cmd_loose_eval)
+
+    p_follow = sub.add_parser("follow-eval", help="Offline instruction-following ASR with heuristic and/or Qwen3Guard 0/1 judge.")
+    p_follow.add_argument("--config", required=True, help="Path to JSON config.")
+    p_follow.add_argument("--attack-results", default=None, help="Path to attack_results.jsonl.")
+    p_follow.add_argument("--guard-eval", default=None, help="Optional guard_eval.jsonl for strict-vs-follow comparison.")
+    p_follow.add_argument("--mode", choices=["heuristic", "judge", "both"], default="both")
+    p_follow.add_argument("--batch-size", type=int, default=None)
+    p_follow.add_argument("--max-new-tokens", type=int, default=8)
+    p_follow.set_defaults(func=cmd_follow_eval)
 
     p_run = sub.add_parser("run", parents=[common], help="Run probe, attack, and guard evaluation.")
     p_run.add_argument("--resume", action="store_true", help="Reuse boundary probes and attack shards when present.")
