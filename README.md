@@ -52,6 +52,14 @@ python -m jailbound attack --config configs/qwen25vl_local.json --limit 20
 python -m jailbound eval --config configs/qwen25vl_local.json
 ```
 
+Offline loose non-refusal ASR, without rerunning attack or loading Qwen3Guard:
+
+```powershell
+python -m jailbound loose-eval --config configs/qwen25vl_local.json
+```
+
+This writes `loose_asr_eval.jsonl` and `loose_asr_summary.json`, including category-level non-refusal ASR and optional comparison to Qwen3Guard labels when `guard_eval.jsonl` exists.
+
 If you use a `src` layout without installing the package, run from this repo root with:
 
 ```powershell

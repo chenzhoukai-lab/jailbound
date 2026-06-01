@@ -8,6 +8,7 @@ from .boundary import probe_boundaries
 from .config import Config
 from .dataset import load_mm_safetybench
 from .guard import evaluate_results
+from .loose_eval import evaluate_loose_asr
 
 
 def _samples(cfg: Config, limit: int | None):
@@ -52,6 +53,13 @@ def cmd_eval(args) -> None:
     print(f"Saved guard evaluation: {out}")
 
 
+def cmd_loose_eval(args) -> None:
+    cfg = Config.from_json(args.config)
+    out, summary = evaluate_loose_asr(cfg, args.attack_results, args.guard_eval)
+    print(f"Saved loose ASR evaluation: {out}")
+    print(f"Saved loose ASR summary: {summary}")
+
+
 def cmd_run(args) -> None:
     # 一键复现：probe -> attack -> eval。
     # 初学时建议先用 --limit 2 或 --limit 5，确认路径和显存都没问题。
@@ -84,6 +92,12 @@ def main(argv: list[str] | None = None) -> None:
     p_eval.add_argument("--config", required=True, help="Path to JSON config.")
     p_eval.add_argument("--attack-results", default=None, help="Path to attack_results.jsonl.")
     p_eval.set_defaults(func=cmd_eval)
+
+    p_loose = sub.add_parser("loose-eval", help="Offline non-refusal ASR evaluation without loading judge models.")
+    p_loose.add_argument("--config", required=True, help="Path to JSON config.")
+    p_loose.add_argument("--attack-results", default=None, help="Path to attack_results.jsonl.")
+    p_loose.add_argument("--guard-eval", default=None, help="Optional guard_eval.jsonl for strict-vs-loose comparison.")
+    p_loose.set_defaults(func=cmd_loose_eval)
 
     p_run = sub.add_parser("run", parents=[common], help="Run probe, attack, and guard evaluation.")
     p_run.add_argument("--resume", action="store_true", help="Reuse boundary probes and attack shards when present.")

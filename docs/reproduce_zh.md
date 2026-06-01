@@ -68,3 +68,18 @@ accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound eval --c
 - `attack_results.jsonl`
 - `guard_eval.jsonl`
 - `summary.json`
+
+## 宽松 ASR / non-refusal ASR
+
+如果只想判断是不是 Qwen3Guard 评测口径过严，不需要重新攻击，也不需要加载任何模型。直接对已有 `attack_results.jsonl` 做离线 non-refusal 统计：
+
+```powershell
+python -m jailbound loose-eval --config configs/qwen25vl_local.json
+```
+
+输出：
+
+- `outputs/qwen25vl_jailbound/loose_asr_eval.jsonl`：每条样本是否匹配拒答模板。
+- `outputs/qwen25vl_jailbound/loose_asr_summary.json`：总体 non-refusal ASR、按类别 ASR，以及在存在 `guard_eval.jsonl` 时同步给出 Qwen3Guard ASR 对照。
+
+这个指标只看“是否拒答”，比 Qwen3Guard 的 `Unsafe` 判定更宽松，更接近论文里的 non-refusal ASR 口径。
