@@ -29,10 +29,27 @@ def _samples(cfg: Config, limit: int | None):
     raise FileNotFoundError(f"Could not find MM-SafetyBench data under {root}")
 
 
+def _apply_job_options(base: Config, samples: list, args) -> list:
+    if getattr(args, "output_suffix", None):
+        base.output_dir = f"{base.output_dir}_{args.output_suffix}"
+    num_splits = int(getattr(args, "num_splits", 1) or 1)
+    split_index = int(getattr(args, "split_index", 0) or 0)
+    if num_splits < 1:
+        raise ValueError("--num-splits must be >= 1")
+    if split_index < 0 or split_index >= num_splits:
+        raise ValueError("--split-index must satisfy 0 <= split_index < num_splits")
+    if num_splits == 1:
+        return samples
+    split = samples[split_index::num_splits]
+    print(f"Using split {split_index}/{num_splits}: {len(split)} of {len(samples)} samples.")
+    return split
+
+
 def cmd_probe(args) -> None:
     v2, base = V2Config.from_json(args.config)
     base.validate_paths()
     samples = _samples(base, args.limit)
+    samples = _apply_job_options(base, samples, args)
     out = probe_boundaries_v2(
         base,
         samples,
@@ -60,6 +77,7 @@ def cmd_attack(args) -> None:
     v2, base = V2Config.from_json(args.config)
     base.validate_paths()
     samples = _samples(base, args.limit)
+    samples = _apply_job_options(base, samples, args)
     _prepare_v2_attack_config(v2, base, samples)
     boundary = Path(args.boundary or (base.output_path / "boundary_probes_v2.pt"))
     if not boundary.exists():
@@ -72,8 +90,9 @@ def cmd_run(args) -> None:
     v2, base = V2Config.from_json(args.config)
     base.validate_paths(require_guard=True)
     samples = _samples(base, args.limit)
+    samples = _apply_job_options(base, samples, args)
     _prepare_v2_attack_config(v2, base, samples)
-    boundary = base.output_path / "boundary_probes_v2.pt"
+    boundary = Path(args.boundary) if args.boundary else base.output_path / "boundary_probes_v2.pt"
     if not args.resume or not boundary.exists():
         boundary = probe_boundaries_v2(
             base,
@@ -102,6 +121,9 @@ def main(argv: list[str] | None = None) -> None:
     p_probe = sub.add_parser("probe", help="Run matched safe/unsafe probing.")
     p_probe.add_argument("--config", default="jailbound_v2/configs/qwen25vl_v2.json")
     p_probe.add_argument("--limit", type=int, default=None)
+    p_probe.add_argument("--num-splits", type=int, default=1)
+    p_probe.add_argument("--split-index", type=int, default=0)
+    p_probe.add_argument("--output-suffix", default=None)
     p_probe.set_defaults(func=cmd_probe)
 
     p_attack = sub.add_parser("attack", help="Run v2 attack using matched boundary probes.")
@@ -109,12 +131,19 @@ def main(argv: list[str] | None = None) -> None:
     p_attack.add_argument("--limit", type=int, default=None)
     p_attack.add_argument("--boundary", default=None)
     p_attack.add_argument("--resume", action="store_true")
+    p_attack.add_argument("--num-splits", type=int, default=1)
+    p_attack.add_argument("--split-index", type=int, default=0)
+    p_attack.add_argument("--output-suffix", default=None)
     p_attack.set_defaults(func=cmd_attack)
 
     p_run = sub.add_parser("run", help="Run v2 probe, attack, and Qwen3Guard evaluation.")
     p_run.add_argument("--config", default="jailbound_v2/configs/qwen25vl_v2.json")
     p_run.add_argument("--limit", type=int, default=None)
     p_run.add_argument("--resume", action="store_true")
+    p_run.add_argument("--boundary", default=None)
+    p_run.add_argument("--num-splits", type=int, default=1)
+    p_run.add_argument("--split-index", type=int, default=0)
+    p_run.add_argument("--output-suffix", default=None)
     p_run.set_defaults(func=cmd_run)
 
     p_analyze = sub.add_parser("analyze", help="Analyze guard_eval.jsonl by category.")

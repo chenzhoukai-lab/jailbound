@@ -38,6 +38,24 @@ PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 4 --
   -m jailbound_v2 run --config jailbound_v2/configs/qwen25vl_v2.json --resume
 ```
 
+Run two independent 2xH100 instances without conflicts by using different
+dataset splits and output suffixes. If you already have a full v2 boundary file,
+pass it to both jobs with `--boundary`:
+
+```bash
+# instance A
+PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 2 --mixed_precision bf16 \
+  -m jailbound_v2 run --config jailbound_v2/configs/qwen25vl_v2.json \
+  --boundary outputs/qwen25vl_jailbound_v2/boundary_probes_v2.pt \
+  --num-splits 2 --split-index 0 --output-suffix split0 --resume
+
+# instance B
+PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 2 --mixed_precision bf16 \
+  -m jailbound_v2 run --config jailbound_v2/configs/qwen25vl_v2.json \
+  --boundary outputs/qwen25vl_jailbound_v2/boundary_probes_v2.pt \
+  --num-splits 2 --split-index 1 --output-suffix split1 --resume
+```
+
 Analyze existing baseline outputs:
 
 ```bash

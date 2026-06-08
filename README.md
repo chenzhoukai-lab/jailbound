@@ -103,6 +103,16 @@ To resume an interrupted attack, keep `outputs/qwen25vl_jailbound/_attack_shards
 accelerate launch --num_processes 4 --mixed_precision bf16 -m jailbound run --config configs/qwen25vl_local.json --resume
 ```
 
+To run two independent jobs on two separate 2xH100 instances without file conflicts, split the dataset and give each job its own output suffix:
+
+```powershell
+# instance A
+CUDA_VISIBLE_DEVICES=0,1 PYTHONPATH=$PWD/src accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound run --config configs/qwen25vl_local.json --num-splits 2 --split-index 0 --output-suffix split0 --resume
+
+# instance B
+CUDA_VISIBLE_DEVICES=0,1 PYTHONPATH=$PWD/src accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound run --config configs/qwen25vl_local.json --num-splits 2 --split-index 1 --output-suffix split1 --resume
+```
+
 ## Notes
 
 Qwen2.5-VL model internals differ from the abstract notation in the paper. This implementation treats decoder hidden states after multimodal token fusion as the fusion-layer representations `h(l)`, which is the accessible equivalent for Hugging Face Qwen2.5-VL.

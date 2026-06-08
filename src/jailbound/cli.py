@@ -29,10 +29,27 @@ def _samples(cfg: Config, limit: int | None):
     raise FileNotFoundError(f"Could not find MM-SafetyBench data.json files. Tried: {tried}")
 
 
+def _apply_job_options(cfg: Config, samples: list, args) -> list:
+    if getattr(args, "output_suffix", None):
+        cfg.output_dir = f"{cfg.output_dir}_{args.output_suffix}"
+    num_splits = int(getattr(args, "num_splits", 1) or 1)
+    split_index = int(getattr(args, "split_index", 0) or 0)
+    if num_splits < 1:
+        raise ValueError("--num-splits must be >= 1")
+    if split_index < 0 or split_index >= num_splits:
+        raise ValueError("--split-index must satisfy 0 <= split_index < num_splits")
+    if num_splits == 1:
+        return samples
+    split = samples[split_index::num_splits]
+    print(f"Using split {split_index}/{num_splits}: {len(split)} of {len(samples)} samples.")
+    return split
+
+
 def cmd_probe(args) -> None:
     cfg = Config.from_json(args.config)
     cfg.validate_paths()
     samples = _samples(cfg, args.limit)
+    samples = _apply_job_options(cfg, samples, args)
     print(f"Loaded {len(samples)} samples for boundary probing.")
     out = probe_boundaries(cfg, samples)
     print(f"Saved boundary probes: {out}")
@@ -42,6 +59,7 @@ def cmd_attack(args) -> None:
     cfg = Config.from_json(args.config)
     cfg.validate_paths()
     samples = _samples(cfg, args.limit)
+    samples = _apply_job_options(cfg, samples, args)
     print(f"Loaded {len(samples)} samples for attack.")
     out = run_attack(cfg, samples, args.boundary, resume=args.resume)
     print(f"Saved attack results: {out}")
@@ -80,6 +98,7 @@ def cmd_run(args) -> None:
     cfg = Config.from_json(args.config)
     cfg.validate_paths(require_guard=True)
     samples = _samples(cfg, args.limit)
+    samples = _apply_job_options(cfg, samples, args)
     print(f"Loaded {len(samples)} samples for full JailBound reproduction.")
     boundary = cfg.output_path / "boundary_probes.pt" if args.resume and (cfg.output_path / "boundary_probes.pt").exists() else probe_boundaries(cfg, samples)
     attack_results = run_attack(cfg, samples, boundary, resume=args.resume)
@@ -93,6 +112,9 @@ def main(argv: list[str] | None = None) -> None:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", required=True, help="Path to JSON config.")
     common.add_argument("--limit", type=int, default=None, help="Optional sample limit for quick reproduction runs.")
+    common.add_argument("--num-splits", type=int, default=1, help="Split the loaded dataset into N interleaved jobs.")
+    common.add_argument("--split-index", type=int, default=0, help="Run only this split index, in [0, num_splits).")
+    common.add_argument("--output-suffix", default=None, help="Append a suffix to output_dir to avoid multi-job conflicts.")
 
     p_probe = sub.add_parser("probe", parents=[common], help="Train layer-wise safety boundary probes.")
     p_probe.set_defaults(func=cmd_probe)
