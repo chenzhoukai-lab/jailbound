@@ -115,3 +115,17 @@ Judge 版加载 `follow_judge_model_path`，推荐本地 `Qwen2.5-7B-Instruct`�
 
 - `outputs/qwen25vl_jailbound/follow_asr_eval.jsonl`
 - `outputs/qwen25vl_jailbound/follow_asr_summary.json`
+
+## 导出 ASR 表格
+
+生成总体表、分类别表，并在 Markdown 报告里列出 `follow_judge_asr` 使用的 Qwen2.5 语义响应判断 prompt：
+
+```powershell
+python scripts/export_asr_tables.py --summary outputs/qwen25vl_jailbound/follow_asr_summary.json
+```
+
+输出目录：
+
+- `outputs/qwen25vl_jailbound/tables/asr_summary.md`
+- `outputs/qwen25vl_jailbound/tables/asr_overall.csv`
+- `outputs/qwen25vl_jailbound/tables/asr_by_category.csv`

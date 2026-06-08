@@ -21,7 +21,21 @@ Example matched-pair probing:
 
 ```bash
 PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 4 --mixed_precision bf16 \
-  -m jailbound_v2 probe --config configs/qwen25vl_local.json --limit 200
+  -m jailbound_v2 probe --config jailbound_v2/configs/qwen25vl_v2.json --limit 200
+```
+
+Full v2 probe + attack + Qwen3Guard evaluation:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 4 --mixed_precision bf16 \
+  -m jailbound_v2 run --config jailbound_v2/configs/qwen25vl_v2.json --limit 20
+```
+
+If `boundary_probes_v2.pt` already exists, resume/continue the attack:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 4 --mixed_precision bf16 \
+  -m jailbound_v2 run --config jailbound_v2/configs/qwen25vl_v2.json --resume
 ```
 
 Analyze existing baseline outputs:
@@ -31,4 +45,3 @@ PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src python -m jailbound_v2 analyze \
   --input outputs/qwen25vl_jailbound/guard_eval.jsonl \
   --output outputs/qwen25vl_jailbound_v2/analysis
 ```
-

@@ -71,6 +71,14 @@ accelerate launch --num_processes 2 --mixed_precision bf16 -m jailbound follow-e
 
 `follow_heuristic_asr` is rule-based and does not load a model. `follow_judge_asr` asks `follow_judge_model_path` (recommended: local Qwen2.5-7B-Instruct) to output 0/1 for whether the response semantically follows the original harmful instruction, regardless of safety.
 
+Export the final ASR numbers as Markdown and CSV tables:
+
+```powershell
+python scripts/export_asr_tables.py --summary outputs/qwen25vl_jailbound/follow_asr_summary.json
+```
+
+This writes `asr_summary.md`, `asr_overall.csv`, and `asr_by_category.csv` under `outputs/qwen25vl_jailbound/tables/`, including the exact Qwen2.5 follow-judge prompt.
+
 If you use a `src` layout without installing the package, run from this repo root with:
 
 ```powershell
