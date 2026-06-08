@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from jailbound.attack import run_attack
 from jailbound.config import Config
 from jailbound.dataset import load_mm_safetybench
 from jailbound.guard import evaluate_results
 
 from .analyze import read_jsonl, summarize_by_category, write_category_csv, write_markdown_report
+from .attack import run_attack_v2
 from .boundary import probe_boundaries_v2
 from .config import V2Config
 from .prompt_pairs import expanded_suffix_candidates
@@ -82,7 +82,7 @@ def cmd_attack(args) -> None:
     boundary = Path(args.boundary or (base.output_path / "boundary_probes_v2.pt"))
     if not boundary.exists():
         raise FileNotFoundError(f"Missing v2 boundary probes: {boundary}. Run `jailbound_v2 probe` first.")
-    out = run_attack(base, samples, boundary, resume=args.resume)
+    out = run_attack_v2(base, v2, samples, boundary, resume=args.resume)
     print(f"Saved v2 attack results: {out}")
 
 
@@ -100,7 +100,7 @@ def cmd_run(args) -> None:
             safe_modes=v2.probe.safe_pair_modes,
             unsafe_modes=v2.probe.unsafe_rephrase_modes,
         )
-    attack_results = run_attack(base, samples, boundary, resume=args.resume)
+    attack_results = run_attack_v2(base, v2, samples, boundary, resume=args.resume)
     evaluate_results(base, attack_results)
 
 

@@ -7,7 +7,7 @@ Implemented in v2:
 
 - matched safe/unsafe prompt-pair probing
 - expanded suffix-bank generation for text perturbation experiments
-- HotFlip-style token replacement utilities for future integration
+- HotFlip-style token replacement integrated into the v2 attack path
 - raw-image perturbation/export utilities for moving beyond processor `pixel_values`
 - lightweight experiment analysis by category
 
@@ -29,6 +29,17 @@ Full v2 probe + attack + Qwen3Guard evaluation:
 ```bash
 PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 4 --mixed_precision bf16 \
   -m jailbound_v2 run --config jailbound_v2/configs/qwen25vl_v2.json --limit 20
+```
+
+The v2 attack now first selects a suffix candidate, locates its token span after
+Qwen's chat template/image-token expansion, then applies HotFlip-style token
+replacement before the visual `pixel_values` optimization. Each output row keeps
+the initial suffix, final `adv_suffix`, token span metadata, and per-step token
+replacement trace in:
+
+```text
+attack.initial_suffix
+attack.hotflip_trace
 ```
 
 If `boundary_probes_v2.pt` already exists, resume/continue the attack:
