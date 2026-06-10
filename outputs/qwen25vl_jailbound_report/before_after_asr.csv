@@ -1,0 +1,2 @@
+baseline,run,qwen3guard_baseline_asr,qwen3guard_run_asr,qwen3guard_delta,non_refusal_baseline_asr,non_refusal_run_asr,non_refusal_delta,qwen25_judge_baseline_asr,qwen25_judge_run_asr,qwen25_judge_delta
+baseline,jailbound_v2,0.06428571428571428,0.0380952380952381,-0.02619047619047618,0.9630952380952381,0.9535714285714286,-0.00952380952380949,0.25,0.18035714285714285,-0.06964285714285715
