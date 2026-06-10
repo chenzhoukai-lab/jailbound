@@ -1,0 +1,228 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from jailbound.config import Config
+from jailbound.dataset import load_mm_safetybench
+from jailbound.guard import evaluate_results
+from jailbound.loose_eval import evaluate_follow_asr, evaluate_loose_asr
+
+from .analyze import read_jsonl, summarize_by_category, write_category_csv, write_markdown_report
+from .attack import run_attack_v3
+from .boundary import probe_boundaries_v3
+from .config import V3Config
+from .prompt_pairs import expanded_suffix_candidates
+from .report import build_report
+
+
+def _samples(cfg: Config, limit: int | None):
+    root = Path(cfg.dataset_root)
+    candidates = [root]
+    if cfg.dataset_name:
+        candidates.extend([root / cfg.dataset_name, root / "safebench", root / "mm-safetybench"])
+    for candidate in candidates:
+        try:
+            return load_mm_safetybench(candidate, image_format=cfg.image_format, limit=limit)
+        except FileNotFoundError:
+            raise
+        except Exception:
+            continue
+    raise FileNotFoundError(f"Could not find MM-SafetyBench data under {root}")
+
+
+def _apply_job_options(base: Config, samples: list, args) -> list:
+    if getattr(args, "output_suffix", None):
+        base.output_dir = f"{base.output_dir}_{args.output_suffix}"
+    num_splits = int(getattr(args, "num_splits", 1) or 1)
+    split_index = int(getattr(args, "split_index", 0) or 0)
+    if num_splits < 1:
+        raise ValueError("--num-splits must be >= 1")
+    if split_index < 0 or split_index >= num_splits:
+        raise ValueError("--split-index must satisfy 0 <= split_index < num_splits")
+    if num_splits == 1:
+        return samples
+    split = samples[split_index::num_splits]
+    print(f"Using split {split_index}/{num_splits}: {len(split)} of {len(samples)} samples.")
+    return split
+
+
+def cmd_probe(args) -> None:
+    v3, base = V3Config.from_json(args.config)
+    base.validate_paths()
+    samples = _samples(base, args.limit)
+    samples = _apply_job_options(base, samples, args)
+    out = probe_boundaries_v3(
+        base,
+        samples,
+        safe_modes=v3.probe.safe_pair_modes,
+        unsafe_modes=v3.probe.unsafe_rephrase_modes,
+    )
+    print(f"Saved v3 boundary probes: {out}")
+
+
+def _prepare_v3_attack_config(v3: V3Config, base: Config, samples) -> None:
+    base.attack.suffix = v3.text_attack.suffix_init
+    expanded = []
+    for sample in samples[: min(len(samples), 32)]:
+        expanded.extend(expanded_suffix_candidates(sample.prompt))
+    seen = set()
+    merged = []
+    for suffix in [v3.text_attack.suffix_init, *base.attack.suffix_candidates, *expanded]:
+        if suffix and suffix not in seen:
+            seen.add(suffix)
+            merged.append(suffix)
+    base.attack.suffix_candidates = merged
+
+
+def cmd_attack(args) -> None:
+    v3, base = V3Config.from_json(args.config)
+    base.validate_paths()
+    samples = _samples(base, args.limit)
+    samples = _apply_job_options(base, samples, args)
+    _prepare_v3_attack_config(v3, base, samples)
+    boundary = Path(args.boundary or (base.output_path / "boundary_probes_v3.pt"))
+    if not boundary.exists():
+        raise FileNotFoundError(f"Missing v3 boundary probes: {boundary}. Run `jailbound_v3 probe` first.")
+    out = run_attack_v3(base, v3, samples, boundary, resume=args.resume)
+    print(f"Saved v3 attack results: {out}")
+
+
+def cmd_run(args) -> None:
+    v3, base = V3Config.from_json(args.config)
+    base.validate_paths(require_guard=True)
+    samples = _samples(base, args.limit)
+    samples = _apply_job_options(base, samples, args)
+    _prepare_v3_attack_config(v3, base, samples)
+    boundary = Path(args.boundary) if args.boundary else base.output_path / "boundary_probes_v3.pt"
+    if not args.resume or not boundary.exists():
+        boundary = probe_boundaries_v3(
+            base,
+            samples,
+            safe_modes=v3.probe.safe_pair_modes,
+            unsafe_modes=v3.probe.unsafe_rephrase_modes,
+        )
+    attack_results = run_attack_v3(base, v3, samples, boundary, resume=args.resume)
+    evaluate_results(base, attack_results)
+
+
+def cmd_analyze(args) -> None:
+    rows = read_jsonl(args.input)
+    summary = summarize_by_category(rows)
+    out_dir = Path(args.output)
+    csv_path = write_category_csv(summary, out_dir / "category_summary.csv")
+    md_path = write_markdown_report(summary, out_dir / "category_report.md")
+    print(f"Saved category CSV: {csv_path}")
+    print(f"Saved markdown report: {md_path}")
+
+
+def cmd_loose_eval(args) -> None:
+    _v3, base = V3Config.from_json(args.config)
+    if args.output_suffix:
+        base.output_dir = f"{base.output_dir}_{args.output_suffix}"
+    out, summary = evaluate_loose_asr(base, args.attack_results, args.guard_eval)
+    print(f"Saved v3 non-refusal ASR evaluation: {out}")
+    print(f"Saved v3 non-refusal ASR summary: {summary}")
+
+
+def cmd_follow_eval(args) -> None:
+    _v3, base = V3Config.from_json(args.config)
+    if args.output_suffix:
+        base.output_dir = f"{base.output_dir}_{args.output_suffix}"
+    out, summary = evaluate_follow_asr(
+        base,
+        attack_results=args.attack_results,
+        guard_eval=args.guard_eval,
+        mode=args.mode,
+        batch_size=args.batch_size,
+        max_new_tokens=args.max_new_tokens,
+    )
+    print(f"Saved v3 follow ASR evaluation: {out}")
+    print(f"Saved v3 follow ASR summary: {summary}")
+
+
+def _parse_run_arg(raw: str) -> tuple[str, Path]:
+    if "=" not in raw:
+        raise ValueError(f"Run must be formatted as label=path, got: {raw}")
+    label, path = raw.split("=", 1)
+    label = label.strip()
+    if not label:
+        raise ValueError(f"Run label cannot be empty: {raw}")
+    return label, Path(path)
+
+
+def cmd_report(args) -> None:
+    runs = [_parse_run_arg(raw) for raw in args.run]
+    paths = build_report(runs, args.output)
+    for name, path in paths.items():
+        print(f"Saved {name}: {path}")
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="JailBound v3 experimental commands.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_probe = sub.add_parser("probe", help="Run matched safe/unsafe probing.")
+    p_probe.add_argument("--config", default="jailbound_v3/configs/qwen25vl_v3.json")
+    p_probe.add_argument("--limit", type=int, default=None)
+    p_probe.add_argument("--num-splits", type=int, default=1)
+    p_probe.add_argument("--split-index", type=int, default=0)
+    p_probe.add_argument("--output-suffix", default=None)
+    p_probe.set_defaults(func=cmd_probe)
+
+    p_attack = sub.add_parser("attack", help="Run v3 attack using matched boundary probes.")
+    p_attack.add_argument("--config", default="jailbound_v3/configs/qwen25vl_v3.json")
+    p_attack.add_argument("--limit", type=int, default=None)
+    p_attack.add_argument("--boundary", default=None)
+    p_attack.add_argument("--resume", action="store_true")
+    p_attack.add_argument("--num-splits", type=int, default=1)
+    p_attack.add_argument("--split-index", type=int, default=0)
+    p_attack.add_argument("--output-suffix", default=None)
+    p_attack.set_defaults(func=cmd_attack)
+
+    p_run = sub.add_parser("run", help="Run v3 probe, attack, and Qwen3Guard evaluation.")
+    p_run.add_argument("--config", default="jailbound_v3/configs/qwen25vl_v3.json")
+    p_run.add_argument("--limit", type=int, default=None)
+    p_run.add_argument("--resume", action="store_true")
+    p_run.add_argument("--boundary", default=None)
+    p_run.add_argument("--num-splits", type=int, default=1)
+    p_run.add_argument("--split-index", type=int, default=0)
+    p_run.add_argument("--output-suffix", default=None)
+    p_run.set_defaults(func=cmd_run)
+
+    p_analyze = sub.add_parser("analyze", help="Analyze guard_eval.jsonl by category.")
+    p_analyze.add_argument("--input", required=True)
+    p_analyze.add_argument("--output", default="outputs/qwen25vl_jailbound_v3/analysis")
+    p_analyze.set_defaults(func=cmd_analyze)
+
+    p_loose = sub.add_parser("loose-eval", help="Evaluate v3 outputs with non-refusal ASR.")
+    p_loose.add_argument("--config", default="jailbound_v3/configs/qwen25vl_v3.json")
+    p_loose.add_argument("--attack-results", default=None)
+    p_loose.add_argument("--guard-eval", default=None)
+    p_loose.add_argument("--output-suffix", default=None)
+    p_loose.set_defaults(func=cmd_loose_eval)
+
+    p_follow = sub.add_parser("follow-eval", help="Evaluate v3 outputs with heuristic and/or model-based follow ASR.")
+    p_follow.add_argument("--config", default="jailbound_v3/configs/qwen25vl_v3.json")
+    p_follow.add_argument("--attack-results", default=None)
+    p_follow.add_argument("--guard-eval", default=None)
+    p_follow.add_argument("--output-suffix", default=None)
+    p_follow.add_argument("--mode", choices=["heuristic", "judge", "both"], default="both")
+    p_follow.add_argument("--batch-size", type=int, default=None)
+    p_follow.add_argument("--max-new-tokens", type=int, default=8)
+    p_follow.set_defaults(func=cmd_follow_eval)
+
+    p_report = sub.add_parser("report", help="Build unified ASR tables across baseline/v3 runs.")
+    p_report.add_argument(
+        "--run",
+        action="append",
+        required=True,
+        help="Run label and directory, formatted as label=path. Pass multiple times.",
+    )
+    p_report.add_argument("--output", default="outputs/qwen25vl_jailbound_report")
+    p_report.set_defaults(func=cmd_report)
+
+    args = parser.parse_args(argv)
+    args.func(args)
+
+

@@ -1,0 +1,139 @@
+# JailBound v3 Experimental Track
+
+This folder is intentionally separate from the original `src/jailbound` package.
+It is for iterating on the known gaps without overwriting the runnable baseline.
+
+Implemented in v3:
+
+- matched safe/unsafe prompt-pair probing
+- expanded suffix-bank generation for text perturbation experiments
+- suffix-bank attack by default; HotFlip code is kept available but disabled
+- raw-image perturbation/export utilities for moving beyond processor `pixel_values`
+- lightweight experiment analysis by category
+
+Run with both source roots on `PYTHONPATH`:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src python -m jailbound_v3 --help
+```
+
+Example matched-pair probing:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src accelerate launch --num_processes 4 --mixed_precision bf16 \
+  -m jailbound_v3 probe --config jailbound_v3/configs/qwen25vl_v3.json --limit 200
+```
+
+Full v3 probe + attack + Qwen3Guard evaluation:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src accelerate launch --num_processes 4 --mixed_precision bf16 \
+  -m jailbound_v3 run --config jailbound_v3/configs/qwen25vl_v3.json --limit 20
+```
+
+The v3 attack currently defaults to suffix-bank selection without HotFlip token
+replacement (`text_attack.steps = 0`). This keeps the matched safe/unsafe probing
+change while avoiding noisy unrestricted token substitutions. If
+`text_attack.steps` is set above 0, v3 will locate the suffix span after Qwen's
+chat template/image-token expansion and apply HotFlip-style token replacement
+before the visual `pixel_values` optimization. Each output row keeps the initial
+suffix, final `adv_suffix`, token span metadata, and trace in:
+
+```text
+attack.initial_suffix
+attack.hotflip_trace
+```
+
+If `boundary_probes_v3.pt` already exists, resume/continue the attack:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src accelerate launch --num_processes 4 --mixed_precision bf16 \
+  -m jailbound_v3 run --config jailbound_v3/configs/qwen25vl_v3.json --resume
+```
+
+Run three independent 4xH100 instances without conflicts by using different
+dataset splits and output suffixes. If you already have a full v3 boundary file,
+pass it to all jobs with `--boundary`:
+
+```bash
+# instance A
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src accelerate launch --num_processes 4 --mixed_precision bf16 \
+  -m jailbound_v3 run --config jailbound_v3/configs/qwen25vl_v3.json \
+  --boundary outputs/qwen25vl_jailbound_v3/boundary_probes_v3.pt \
+  --num-splits 3 --split-index 0 --output-suffix split0 --resume
+
+# instance B
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src accelerate launch --num_processes 4 --mixed_precision bf16 \
+  -m jailbound_v3 run --config jailbound_v3/configs/qwen25vl_v3.json \
+  --boundary outputs/qwen25vl_jailbound_v3/boundary_probes_v3.pt \
+  --num-splits 3 --split-index 1 --output-suffix split1 --resume
+
+# instance C
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src accelerate launch --num_processes 4 --mixed_precision bf16 \
+  -m jailbound_v3 run --config jailbound_v3/configs/qwen25vl_v3.json \
+  --boundary outputs/qwen25vl_jailbound_v3/boundary_probes_v3.pt \
+  --num-splits 3 --split-index 2 --output-suffix split2 --resume
+```
+
+Analyze existing baseline outputs:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src python -m jailbound_v3 analyze \
+  --input outputs/qwen25vl_jailbound/guard_eval.jsonl \
+  --output outputs/qwen25vl_jailbound_v3/analysis
+```
+
+Evaluate v3 outputs with the looser paper-style metrics:
+
+```bash
+# Merge three split jobs first.
+mkdir -p outputs/qwen25vl_jailbound_v3_merged
+cat outputs/qwen25vl_jailbound_v3_split0/attack_results.jsonl \
+    outputs/qwen25vl_jailbound_v3_split1/attack_results.jsonl \
+    outputs/qwen25vl_jailbound_v3_split2/attack_results.jsonl \
+    > outputs/qwen25vl_jailbound_v3_merged/attack_results.jsonl
+cat outputs/qwen25vl_jailbound_v3_split0/guard_eval.jsonl \
+    outputs/qwen25vl_jailbound_v3_split1/guard_eval.jsonl \
+    outputs/qwen25vl_jailbound_v3_split2/guard_eval.jsonl \
+    > outputs/qwen25vl_jailbound_v3_merged/guard_eval.jsonl
+
+# Non-refusal ASR, matching the paper's looser non-refusal framing.
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src python -m jailbound_v3 loose-eval \
+  --config jailbound_v3/configs/qwen25vl_v3.json \
+  --attack-results outputs/qwen25vl_jailbound_v3_merged/attack_results.jsonl \
+  --guard-eval outputs/qwen25vl_jailbound_v3_merged/guard_eval.jsonl \
+  --output-suffix merged
+
+# Qwen2.5 follow judge ASR. Uses follow_judge_model_path from the base config.
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src accelerate launch --num_processes 2 --mixed_precision bf16 \
+  -m jailbound_v3 follow-eval \
+  --config jailbound_v3/configs/qwen25vl_v3.json \
+  --attack-results outputs/qwen25vl_jailbound_v3_merged/attack_results.jsonl \
+  --guard-eval outputs/qwen25vl_jailbound_v3_merged/guard_eval.jsonl \
+  --output-suffix merged \
+  --mode both
+```
+
+Build unified tables for strict Qwen3Guard ASR, non-refusal ASR, Qwen2.5 judge
+ASR, per-category ASR, and before/after deltas:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v3/src python -m jailbound_v3 report \
+  --run baseline=outputs/qwen25vl_jailbound \
+  --run jailbound_v3=outputs/qwen25vl_jailbound_v3_merged \
+  --output outputs/qwen25vl_jailbound_report
+```
+
+The report command writes:
+
+```text
+outputs/qwen25vl_jailbound_report/overall_asr.csv
+outputs/qwen25vl_jailbound_report/category_asr.csv
+outputs/qwen25vl_jailbound_report/before_after_asr.csv
+outputs/qwen25vl_jailbound_report/before_after_category_asr.csv
+outputs/qwen25vl_jailbound_report/overall_asr.md
+outputs/qwen25vl_jailbound_report/category_asr.md
+outputs/qwen25vl_jailbound_report/before_after_asr.md
+outputs/qwen25vl_jailbound_report/report_summary.json
+```
+
