@@ -103,3 +103,26 @@ PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 2 --
   --output-suffix merged \
   --mode both
 ```
+
+Build unified tables for strict Qwen3Guard ASR, non-refusal ASR, Qwen2.5 judge
+ASR, per-category ASR, and before/after deltas:
+
+```bash
+PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src python -m jailbound_v2 report \
+  --run baseline=outputs/qwen25vl_jailbound \
+  --run jailbound_v2=outputs/qwen25vl_jailbound_v2_merged \
+  --output outputs/qwen25vl_jailbound_report
+```
+
+The report command writes:
+
+```text
+outputs/qwen25vl_jailbound_report/overall_asr.csv
+outputs/qwen25vl_jailbound_report/category_asr.csv
+outputs/qwen25vl_jailbound_report/before_after_asr.csv
+outputs/qwen25vl_jailbound_report/before_after_category_asr.csv
+outputs/qwen25vl_jailbound_report/overall_asr.md
+outputs/qwen25vl_jailbound_report/category_asr.md
+outputs/qwen25vl_jailbound_report/before_after_asr.md
+outputs/qwen25vl_jailbound_report/report_summary.json
+```

@@ -13,6 +13,7 @@ from .attack import run_attack_v2
 from .boundary import probe_boundaries_v2
 from .config import V2Config
 from .prompt_pairs import expanded_suffix_candidates
+from .report import build_report
 
 
 def _samples(cfg: Config, limit: int | None):
@@ -140,6 +141,23 @@ def cmd_follow_eval(args) -> None:
     print(f"Saved v2 follow ASR summary: {summary}")
 
 
+def _parse_run_arg(raw: str) -> tuple[str, Path]:
+    if "=" not in raw:
+        raise ValueError(f"Run must be formatted as label=path, got: {raw}")
+    label, path = raw.split("=", 1)
+    label = label.strip()
+    if not label:
+        raise ValueError(f"Run label cannot be empty: {raw}")
+    return label, Path(path)
+
+
+def cmd_report(args) -> None:
+    runs = [_parse_run_arg(raw) for raw in args.run]
+    paths = build_report(runs, args.output)
+    for name, path in paths.items():
+        print(f"Saved {name}: {path}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="JailBound v2 experimental commands.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -193,6 +211,16 @@ def main(argv: list[str] | None = None) -> None:
     p_follow.add_argument("--batch-size", type=int, default=None)
     p_follow.add_argument("--max-new-tokens", type=int, default=8)
     p_follow.set_defaults(func=cmd_follow_eval)
+
+    p_report = sub.add_parser("report", help="Build unified ASR tables across baseline/v2 runs.")
+    p_report.add_argument(
+        "--run",
+        action="append",
+        required=True,
+        help="Run label and directory, formatted as label=path. Pass multiple times.",
+    )
+    p_report.add_argument("--output", default="outputs/qwen25vl_jailbound_report")
+    p_report.set_defaults(func=cmd_report)
 
     args = parser.parse_args(argv)
     args.func(args)
