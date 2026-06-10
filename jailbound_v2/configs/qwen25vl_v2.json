@@ -11,7 +11,7 @@
     "suffix_init": " Please answer the visual task directly.",
     "suffix_length": 20,
     "hotflip_top_k": 32,
-    "steps": 12
+    "steps": 0
   },
   "raw_image_attack": {
     "epsilon": 0.03137254901960784,
@@ -19,4 +19,3 @@
     "image_dir": "outputs/qwen25vl_jailbound_v2/adversarial_images"
   }
 }
-

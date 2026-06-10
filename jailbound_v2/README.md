@@ -31,11 +31,13 @@ PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 4 --
   -m jailbound_v2 run --config jailbound_v2/configs/qwen25vl_v2.json --limit 20
 ```
 
-The v2 attack now first selects a suffix candidate, locates its token span after
-Qwen's chat template/image-token expansion, then applies HotFlip-style token
-replacement before the visual `pixel_values` optimization. Each output row keeps
-the initial suffix, final `adv_suffix`, token span metadata, and per-step token
-replacement trace in:
+The v2 attack currently defaults to suffix-bank selection without HotFlip token
+replacement (`text_attack.steps = 0`). This keeps the matched safe/unsafe probing
+change while avoiding noisy unrestricted token substitutions. If
+`text_attack.steps` is set above 0, v2 will locate the suffix span after Qwen's
+chat template/image-token expansion and apply HotFlip-style token replacement
+before the visual `pixel_values` optimization. Each output row keeps the initial
+suffix, final `adv_suffix`, token span metadata, and trace in:
 
 ```text
 attack.initial_suffix

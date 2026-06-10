@@ -333,6 +333,7 @@ def run_attack_v2(
     cfg.validate_paths()
     boundary_path = Path(boundary_path or (cfg.output_path / "boundary_probes_v2.pt"))
     probes = load_probes(boundary_path)
+    attack_variant = "jailbound_v2_hotflip" if v2.text_attack.steps > 0 else "jailbound_v2_suffix_bank"
     out_path = cfg.output_path / "attack_results.jsonl"
     shard_dir = cfg.output_path / "_attack_shards"
     if resume:
@@ -381,7 +382,7 @@ def run_attack_v2(
                 "adv_suffix": suffix,
                 "response": response,
                 "attack": {
-                    "variant": "jailbound_v2_hotflip",
+                    "variant": attack_variant,
                     "iterations": cfg.attack.iterations,
                     "pixel_epsilon": cfg.attack.pixel_epsilon,
                     "layers": sorted(probes),
