@@ -6,6 +6,7 @@ from pathlib import Path
 from jailbound.config import Config
 from jailbound.dataset import load_mm_safetybench
 from jailbound.guard import evaluate_results
+from jailbound.loose_eval import evaluate_follow_asr, evaluate_loose_asr
 
 from .analyze import read_jsonl, summarize_by_category, write_category_csv, write_markdown_report
 from .attack import run_attack_v2
@@ -114,6 +115,31 @@ def cmd_analyze(args) -> None:
     print(f"Saved markdown report: {md_path}")
 
 
+def cmd_loose_eval(args) -> None:
+    _v2, base = V2Config.from_json(args.config)
+    if args.output_suffix:
+        base.output_dir = f"{base.output_dir}_{args.output_suffix}"
+    out, summary = evaluate_loose_asr(base, args.attack_results, args.guard_eval)
+    print(f"Saved v2 non-refusal ASR evaluation: {out}")
+    print(f"Saved v2 non-refusal ASR summary: {summary}")
+
+
+def cmd_follow_eval(args) -> None:
+    _v2, base = V2Config.from_json(args.config)
+    if args.output_suffix:
+        base.output_dir = f"{base.output_dir}_{args.output_suffix}"
+    out, summary = evaluate_follow_asr(
+        base,
+        attack_results=args.attack_results,
+        guard_eval=args.guard_eval,
+        mode=args.mode,
+        batch_size=args.batch_size,
+        max_new_tokens=args.max_new_tokens,
+    )
+    print(f"Saved v2 follow ASR evaluation: {out}")
+    print(f"Saved v2 follow ASR summary: {summary}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="JailBound v2 experimental commands.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -150,6 +176,23 @@ def main(argv: list[str] | None = None) -> None:
     p_analyze.add_argument("--input", required=True)
     p_analyze.add_argument("--output", default="outputs/qwen25vl_jailbound_v2/analysis")
     p_analyze.set_defaults(func=cmd_analyze)
+
+    p_loose = sub.add_parser("loose-eval", help="Evaluate v2 outputs with non-refusal ASR.")
+    p_loose.add_argument("--config", default="jailbound_v2/configs/qwen25vl_v2.json")
+    p_loose.add_argument("--attack-results", default=None)
+    p_loose.add_argument("--guard-eval", default=None)
+    p_loose.add_argument("--output-suffix", default=None)
+    p_loose.set_defaults(func=cmd_loose_eval)
+
+    p_follow = sub.add_parser("follow-eval", help="Evaluate v2 outputs with heuristic and/or model-based follow ASR.")
+    p_follow.add_argument("--config", default="jailbound_v2/configs/qwen25vl_v2.json")
+    p_follow.add_argument("--attack-results", default=None)
+    p_follow.add_argument("--guard-eval", default=None)
+    p_follow.add_argument("--output-suffix", default=None)
+    p_follow.add_argument("--mode", choices=["heuristic", "judge", "both"], default="both")
+    p_follow.add_argument("--batch-size", type=int, default=None)
+    p_follow.add_argument("--max-new-tokens", type=int, default=8)
+    p_follow.set_defaults(func=cmd_follow_eval)
 
     args = parser.parse_args(argv)
     args.func(args)

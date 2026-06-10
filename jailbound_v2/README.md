@@ -74,3 +74,32 @@ PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src python -m jailbound_v2 analyze \
   --input outputs/qwen25vl_jailbound/guard_eval.jsonl \
   --output outputs/qwen25vl_jailbound_v2/analysis
 ```
+
+Evaluate v2 outputs with the looser paper-style metrics:
+
+```bash
+# Merge two split jobs first.
+mkdir -p outputs/qwen25vl_jailbound_v2_merged
+cat outputs/qwen25vl_jailbound_v2_split0/attack_results.jsonl \
+    outputs/qwen25vl_jailbound_v2_split1/attack_results.jsonl \
+    > outputs/qwen25vl_jailbound_v2_merged/attack_results.jsonl
+cat outputs/qwen25vl_jailbound_v2_split0/guard_eval.jsonl \
+    outputs/qwen25vl_jailbound_v2_split1/guard_eval.jsonl \
+    > outputs/qwen25vl_jailbound_v2_merged/guard_eval.jsonl
+
+# Non-refusal ASR, matching the paper's looser non-refusal framing.
+PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src python -m jailbound_v2 loose-eval \
+  --config jailbound_v2/configs/qwen25vl_v2.json \
+  --attack-results outputs/qwen25vl_jailbound_v2_merged/attack_results.jsonl \
+  --guard-eval outputs/qwen25vl_jailbound_v2_merged/guard_eval.jsonl \
+  --output-suffix merged
+
+# Qwen2.5 follow judge ASR. Uses follow_judge_model_path from the base config.
+PYTHONPATH=$PWD/src:$PWD/jailbound_v2/src accelerate launch --num_processes 2 --mixed_precision bf16 \
+  -m jailbound_v2 follow-eval \
+  --config jailbound_v2/configs/qwen25vl_v2.json \
+  --attack-results outputs/qwen25vl_jailbound_v2_merged/attack_results.jsonl \
+  --guard-eval outputs/qwen25vl_jailbound_v2_merged/guard_eval.jsonl \
+  --output-suffix merged \
+  --mode both
+```
