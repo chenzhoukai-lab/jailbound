@@ -1,0 +1,11 @@
+{
+  "total": 560,
+  "asr_success": 27,
+  "asr": 0.048214285714285716,
+  "attack_effective": 14,
+  "attack_effective_rate": 0.025,
+  "judge": "Qwen3Guard",
+  "num_processes": 4,
+  "attack_path": "outputs/qwen25vl_jailbound_v3_split1/attack_results.jsonl",
+  "eval_path": "outputs/qwen25vl_jailbound_v3_split1/guard_eval.jsonl"
+}
