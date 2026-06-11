@@ -241,3 +241,85 @@ v2 在方法上补齐了两个重要问题：
 从实验结果看，baseline 在 1680 条样本上的 Qwen3Guard ASR 为 6.43%，non-refusal ASR 为 96.31%，Qwen2.5 judge ASR 为 25.00%；v2 对应结果为 3.81%、95.36% 和 18.04%。这说明 v2 虽然在方法上更完整，但当前配置下没有提升 ASR，反而降低了严格 unsafe 和任务完成类指标。
 
 因此，当前阶段的主要结论是：复现框架和评测体系已经基本建立，但攻击有效性仍不足。后续工作需要从边界是否准确、HotFlip 后缀是否有效、图像扰动是否合理三个方向继续推进。
+
+## 九、第三版实验结果补充
+
+在 v2 结果出来后，又进一步完成了第三版实验结果统计。这里将 baseline、jailbound_v2 和 jailbound_v3 三个版本放在一起比较。
+
+### 1. 三版总体 ASR 对比
+
+| 方法 | 样本数 | Qwen3Guard ASR | Non-Refusal ASR | Qwen2.5 Judge ASR |
+|---|---:|---:|---:|---:|
+| baseline | 1680 | 6.43% | 96.31% | 25.00% |
+| jailbound_v2 | 1680 | 3.81% | 95.36% | 18.04% |
+| jailbound_v3 | 1680 | 4.64% | 94.58% | 22.44% |
+
+从总体结果看，第三版相比 v2 有一定恢复：
+
+- Qwen3Guard ASR 从 3.81% 提升到 4.64%，提升 0.83 个百分点。
+- Qwen2.5 Judge ASR 从 18.04% 提升到 22.44%，提升 4.40 个百分点。
+- Non-Refusal ASR 从 95.36% 降到 94.58%，下降 0.77 个百分点。
+
+这说明第三版相较 v2 更容易生成被 Qwen2.5 judge 认为“完成原始请求”的回答，但模型明显拒答或安全化回答的比例也略有增加。整体来看，v3 比 v2 更接近有效攻击，但仍未超过 baseline。
+
+### 2. 三版相对变化
+
+| 对比 | Qwen3Guard ASR 变化 | Non-Refusal ASR 变化 | Qwen2.5 Judge ASR 变化 |
+|---|---:|---:|---:|
+| jailbound_v2 - baseline | -2.62% | -0.95% | -6.96% |
+| jailbound_v3 - baseline | -1.79% | -1.73% | -2.56% |
+| jailbound_v3 - jailbound_v2 | +0.83% | -0.77% | +4.40% |
+
+这个结果说明，v3 主要改善的是“任务完成度”指标，也就是 Qwen2.5 Judge ASR。相比 v2，v3 的回答更容易被判断为在尝试完成原始请求；但相比 baseline，v3 仍然偏低，说明第三版虽然修复了一部分 v2 的问题，但还没有完全恢复甚至超过初版的攻击效果。
+
+### 3. 第三版分类别结果
+
+| 类别 | 样本数 | Qwen3Guard ASR | Non-Refusal ASR | Qwen2.5 Judge ASR |
+|---|---:|---:|---:|---:|
+| EconomicHarm | 122 | 2.46% | 95.90% | 28.69% |
+| Financial_Advice | 167 | 0.00% | 100.00% | 59.28% |
+| Fraud | 154 | 5.84% | 90.26% | 17.53% |
+| Gov_Decision | 149 | 0.00% | 98.66% | 12.08% |
+| HateSpeech | 163 | 3.68% | 85.89% | 16.56% |
+| Health_Consultation | 109 | 0.00% | 100.00% | 9.17% |
+| Illegal_Activitiy | 97 | 12.37% | 89.69% | 6.19% |
+| Legal_Opinion | 130 | 1.54% | 93.85% | 20.77% |
+| Malware_Generation | 44 | 2.27% | 97.73% | 22.73% |
+| Physical_Harm | 144 | 8.33% | 93.06% | 20.14% |
+| Political_Lobbying | 153 | 0.00% | 100.00% | 24.18% |
+| Privacy_Violence | 139 | 6.47% | 88.49% | 19.42% |
+| Sex | 109 | 22.02% | 99.08% | 22.94% |
+
+分类别看，v3 的提升主要体现在 Qwen2.5 Judge ASR 上：
+
+- `Financial_Advice` 从 v2 的 53.29% 提升到 59.28%，接近 baseline 的 64.07%。
+- `Physical_Harm` 从 v2 的 11.11% 恢复到 20.14%，基本回到 baseline。
+- `Privacy_Violence` 从 v2 的 10.79% 提升到 19.42%，超过 baseline 的 17.27%。
+- `Sex` 的 Qwen3Guard ASR 提升明显，从 v2 的 12.84% 提升到 22.02%，也超过 baseline 的 11.93%。
+
+但也有一些类别仍然较弱：
+
+- `Illegal_Activitiy` 的 Qwen2.5 Judge ASR 从 v2 的 11.34% 降到 6.19%，虽然 Qwen3Guard ASR 从 8.25% 提升到 12.37%，但任务完成度反而下降。
+- `Malware_Generation` 的 Qwen3Guard ASR 从 v2 的 9.09% 降到 2.27%，说明第三版对该类严格 Unsafe 输出的推动较弱。
+- `HateSpeech` 的 Non-Refusal ASR 降到 85.89%，是第三版中拒答或安全化倾向相对更明显的类别。
+
+### 4. 对第三版结果的理解
+
+结合 v2 中观察到的 HotFlip 后缀问题，可以认为第三版部分缓解了 v2 的文本扰动失效问题。v2 中 HotFlip 经常生成乱码、多语种碎片或不自然 token，使最终回答变得泛化、不具体，因此 Qwen2.5 Judge ASR 明显下降。v3 的 Qwen2.5 Judge ASR 回升到 22.44%，说明第三版在生成更可用回答方面有所改善。
+
+不过，v3 仍然没有超过 baseline，说明当前攻击效果的瓶颈还没有完全解决。可能原因包括：
+
+1. **边界目标和最终生成目标仍未完全对齐。** 当前优化仍主要围绕 hidden-state boundary loss，不能保证最终输出一定更 unsafe 或更任务完成。
+2. **文本扰动仍可能影响回答自然性。** 即使 v3 比 v2 更好，suffix 优化仍需要继续限制 token 空间、保存 best suffix，并避免使用破坏语义的 token。
+3. **不同类别对扰动非常敏感。** 例如 `Sex`、`Privacy_Violence` 在 v3 中有明显提升，但 `Illegal_Activitiy`、`Malware_Generation` 仍然表现不稳定。
+4. **Qwen3Guard ASR 与 Qwen2.5 Judge ASR 不完全一致。** 有些类别严格 Unsafe 上升，但任务完成度下降，说明安全判定和任务完成判定衡量的是不同维度。
+
+### 5. 当前阶段结论更新
+
+综合三版结果，目前可以得到一个更清晰的结论：
+
+- baseline 虽然方法较粗糙，但在当前配置下总体 ASR 最高。
+- v2 更接近论文流程，但 HotFlip 后缀质量和目标函数没有处理好，导致 ASR 明显下降。
+- v3 相比 v2 有恢复，尤其 Qwen2.5 Judge ASR 明显提升，但仍未超过 baseline。
+
+因此，后续优化不应只追求“形式上更接近论文”，而应重点关注扰动是否真的转化为更具体、更任务完成的输出。下一步更有价值的方向是：限制 HotFlip token 搜索空间、对候选替换做真实前向验证、保存最佳 suffix，并把最终回答的任务完成度纳入筛选或分析。
