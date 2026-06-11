@@ -1,0 +1,76 @@
+{
+  "left": "outputs/qwen25vl_jailbound_v4_b0_baseline_suffix/boundary_probes.pt",
+  "right": "outputs/qwen25vl_jailbound_v4_b1_matched_suffix/boundary_probes_v4.pt",
+  "layers": [
+    {
+      "layer": 19,
+      "cosine": 0.28214749693870544,
+      "left_epsilon": 37.522125244140625,
+      "right_epsilon": 22.564420700073242,
+      "epsilon_delta": -14.957704544067383
+    },
+    {
+      "layer": 20,
+      "cosine": 0.26171886920928955,
+      "left_epsilon": 35.84946060180664,
+      "right_epsilon": 21.562219619750977,
+      "epsilon_delta": -14.287240982055664
+    },
+    {
+      "layer": 21,
+      "cosine": 0.28236594796180725,
+      "left_epsilon": 35.18586730957031,
+      "right_epsilon": 21.393728256225586,
+      "epsilon_delta": -13.792139053344727
+    },
+    {
+      "layer": 22,
+      "cosine": 0.2583732306957245,
+      "left_epsilon": 34.7491569519043,
+      "right_epsilon": 20.930763244628906,
+      "epsilon_delta": -13.81839370727539
+    },
+    {
+      "layer": 23,
+      "cosine": 0.2650109529495239,
+      "left_epsilon": 33.5752067565918,
+      "right_epsilon": 20.620119094848633,
+      "epsilon_delta": -12.955087661743164
+    },
+    {
+      "layer": 24,
+      "cosine": 0.23687167465686798,
+      "left_epsilon": 33.25727081298828,
+      "right_epsilon": 20.26102066040039,
+      "epsilon_delta": -12.99625015258789
+    },
+    {
+      "layer": 25,
+      "cosine": 0.21361979842185974,
+      "left_epsilon": 32.09110641479492,
+      "right_epsilon": 19.9650821685791,
+      "epsilon_delta": -12.12602424621582
+    },
+    {
+      "layer": 26,
+      "cosine": 0.1568654328584671,
+      "left_epsilon": 32.418819427490234,
+      "right_epsilon": 19.497072219848633,
+      "epsilon_delta": -12.921747207641602
+    },
+    {
+      "layer": 27,
+      "cosine": 0.1315765231847763,
+      "left_epsilon": 31.827709197998047,
+      "right_epsilon": 18.488155364990234,
+      "epsilon_delta": -13.339553833007812
+    },
+    {
+      "layer": 28,
+      "cosine": 0.10375473648309708,
+      "left_epsilon": 31.369565963745117,
+      "right_epsilon": 18.1970272064209,
+      "epsilon_delta": -13.172538757324219
+    }
+  ]
+}

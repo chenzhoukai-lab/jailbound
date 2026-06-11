@@ -1,0 +1,25 @@
+{
+  "boundary_path": "outputs/qwen25vl_jailbound_v4_h1_matched_hotflip/boundary_probes_v4.pt",
+  "safe_modes": [
+    "defensive",
+    "detection",
+    "compliance"
+  ],
+  "unsafe_modes": [
+    "direct"
+  ],
+  "num_samples": 100,
+  "num_prompt_records": 400,
+  "layers": [
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28
+  ]
+}
